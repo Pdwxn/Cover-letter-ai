@@ -1,65 +1,57 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useEffect } from "react";
+import CoverLetterForm from "../../components/CoverLetterForm";
+
+import type { HistoryEntry } from "../../types/index";
+
+const STORAGE_KEY = "cover-letter-history";
+
+function loadHistory(): HistoryEntry[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(entries: HistoryEntry[]) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(0, 10)));
+}
 
 export default function Home() {
-  const [jobDescription, setJobDescription] = useState("");
-  const [userProfile, setUserProfile] = useState("");
-  const [coverLetter, setCoverLetter] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [error, setError] = useState("");
-  const [copied, setCopied] = useState(false);
-  const outputRef = useRef<HTMLDivElement>(null);
+  const [activeTab, setActiveTab]             = useState<"editor" | "history">("editor");
+  const [history, setHistory]                 = useState<HistoryEntry[]>([]);
+  const [selectedHistory, setSelectedHistory] = useState<HistoryEntry | null>(null);
+  const [copied, setCopied]                   = useState(false);
 
-  const generateCoverLetter = async () => {
-    if (!jobDescription.trim() || !userProfile.trim()) {
-      setError("Por favor completa ambos campos antes de generar.");
-      return;
-    }
+  useEffect(() => {
+    setHistory(loadHistory());
+  }, []);
 
-    setError("");
-    setCoverLetter("");
-    setIsGenerating(true);
-
-    try {
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobDescription, userProfile }),
-      });
-
-      if (!response.ok) throw new Error("Error al generar la carta");
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-
-      if (!reader) throw new Error("No se pudo leer la respuesta");
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value);
-        setCoverLetter((prev) => prev + chunk);
-        outputRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-      }
-    } catch (err) {
-      setError("Ocurrió un error. Verifica tu API key e intenta nuevamente.");
-    } finally {
-      setIsGenerating(false);
-    }
+  const handleNewEntry = (entry: Omit<HistoryEntry, "id" | "createdAt">) => {
+    const full: HistoryEntry = {
+      ...entry,
+      id:        crypto.randomUUID(),
+      createdAt: new Date().toLocaleString("es-CL"),
+    };
+    const updated = [full, ...history];
+    setHistory(updated);
+    saveHistory(updated);
   };
 
-  const copyToClipboard = async () => {
-    await navigator.clipboard.writeText(coverLetter);
+  const deleteEntry = (id: string) => {
+    const updated = history.filter((e) => e.id !== id);
+    setHistory(updated);
+    saveHistory(updated);
+    if (selectedHistory?.id === id) setSelectedHistory(null);
+  };
+
+  const copyToClipboard = async (text: string) => {
+    await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
-
-  const reset = () => {
-    setCoverLetter("");
-    setJobDescription("");
-    setUserProfile("");
-    setError("");
   };
 
   return (
@@ -70,123 +62,113 @@ export default function Home() {
           <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center text-black font-bold text-sm">
             AI
           </div>
-          <h1 className="text-lg font-semibold tracking-tight">
-            Cover Letter Generator
-          </h1>
+          <h1 className="text-lg font-semibold tracking-tight">Cover Letter Generator</h1>
           <span className="ml-auto text-xs text-zinc-500 bg-zinc-900 px-2 py-1 rounded-full border border-zinc-800">
             llama-3.1-8b · Groq
           </span>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-10">
-        {/* Intro */}
-        <div className="mb-10">
-          <h2 className="text-3xl font-bold tracking-tight mb-2">
-            Genera tu carta de presentación{" "}
-            <span className="text-emerald-400">en segundos</span>
-          </h2>
-          <p className="text-zinc-400 text-base">
-            Pega la oferta de trabajo y tu perfil. La IA creará una carta personalizada con streaming en tiempo real.
-          </p>
+      <div className="max-w-5xl mx-auto px-6 py-8">
+        {/* Tabs */}
+        <div className="flex gap-1 mb-8 bg-zinc-900 p-1 rounded-xl w-fit border border-zinc-800">
+          {(["editor", "history"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeTab === tab
+                  ? "bg-zinc-800 text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              {tab === "editor"
+                ? "✏️ Editor"
+                : `📋 Historial${history.length > 0 ? ` (${history.length})` : ""}`}
+            </button>
+          ))}
         </div>
 
-        {/* Inputs */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-300">
-              📋 Oferta de trabajo
-            </label>
-            <textarea
-              value={jobDescription}
-              onChange={(e) => setJobDescription(e.target.value)}
-              placeholder="Pega aquí la descripción completa del puesto, requisitos, responsabilidades y nombre de la empresa..."
-              className="w-full h-52 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-300">
-              👤 Tu perfil profesional
-            </label>
-            <textarea
-              value={userProfile}
-              onChange={(e) => setUserProfile(e.target.value)}
-              placeholder="Describe tu experiencia, habilidades clave, logros destacados, tecnologías que dominas y lo que te motiva de este rol..."
-              className="w-full h-52 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
-            />
-          </div>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="mb-4 px-4 py-3 rounded-lg bg-red-950/50 border border-red-800/50 text-red-400 text-sm">
-            {error}
-          </div>
+        {/* Tab: Editor */}
+        {activeTab === "editor" && (
+          <CoverLetterForm onNewEntry={handleNewEntry} />
         )}
 
-        {/* Generate Button */}
-        <div className="flex gap-3">
-          <button
-            onClick={generateCoverLetter}
-            disabled={isGenerating}
-            className="flex-1 md:flex-none md:px-8 py-3 bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-700 disabled:cursor-not-allowed text-black disabled:text-zinc-500 font-semibold rounded-xl transition-all text-sm flex items-center justify-center gap-2"
-          >
-            {isGenerating ? (
-              <>
-                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                </svg>
-                Generando...
-              </>
-            ) : (
-              "✨ Generar carta"
-            )}
-          </button>
-
-          {coverLetter && !isGenerating && (
-            <button
-              onClick={reset}
-              className="px-4 py-3 border border-zinc-700 hover:border-zinc-500 text-zinc-400 hover:text-zinc-200 rounded-xl transition-all text-sm"
-            >
-              Limpiar
-            </button>
-          )}
-        </div>
-
-        {/* Output */}
-        {(coverLetter || isGenerating) && (
-          <div className="mt-8" ref={outputRef}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-medium text-zinc-300">
-                  Carta de presentación
-                </h3>
-                {isGenerating && (
-                  <span className="text-xs text-emerald-400 animate-pulse">
-                    ● generando
-                  </span>
-                )}
-              </div>
-              {coverLetter && !isGenerating && (
+        {/* Tab: Historial */}
+        {activeTab === "history" && (
+          <div>
+            {history.length === 0 ? (
+              <div className="text-center py-20 text-zinc-500">
+                <p className="text-4xl mb-3">📭</p>
+                <p className="text-sm">Aún no has generado ninguna carta.</p>
                 <button
-                  onClick={copyToClipboard}
-                  className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-lg"
+                  onClick={() => setActiveTab("editor")}
+                  className="mt-4 text-sm text-emerald-400 hover:underline"
                 >
-                  {copied ? "✓ Copiado" : "Copiar texto"}
+                  Ir al editor →
                 </button>
-              )}
-            </div>
-
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-              <div className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap font-mono">
-                {coverLetter}
-                {isGenerating && (
-                  <span className="inline-block w-0.5 h-4 bg-emerald-400 ml-0.5 animate-pulse" />
-                )}
               </div>
-            </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  {history.map((entry) => (
+                    <div
+                      key={entry.id}
+                      onClick={() => setSelectedHistory(entry)}
+                      className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                        selectedHistory?.id === entry.id
+                          ? "border-emerald-500/50 bg-emerald-500/5"
+                          : "border-zinc-800 hover:border-zinc-700 bg-zinc-900/50"
+                      }`}
+                    >
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs text-zinc-500 mb-1">{entry.createdAt}</p>
+                          <p className="text-sm text-zinc-200 truncate">{entry.jobSnippet}</p>
+                          <span className="inline-block mt-1.5 text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 capitalize">
+                            {entry.tone}
+                          </span>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deleteEntry(entry.id); }}
+                          className="text-zinc-600 hover:text-red-400 transition-colors text-xs shrink-0"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="md:col-span-2">
+                  {selectedHistory ? (
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                      <div className="flex justify-between items-center mb-4">
+                        <div>
+                          <p className="text-xs text-zinc-500">{selectedHistory.createdAt}</p>
+                          <p className="text-sm font-medium text-zinc-300 mt-0.5 capitalize">
+                            Tono: {selectedHistory.tone}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => copyToClipboard(selectedHistory.coverLetter)}
+                          className="text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800 border border-zinc-700 px-3 py-1.5 rounded-lg transition-all"
+                        >
+                          {copied ? "✓ Copiado" : "Copiar"}
+                        </button>
+                      </div>
+                      <div className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap font-mono overflow-y-auto max-h-[500px]">
+                        {selectedHistory.coverLetter}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-zinc-600 text-sm py-20">
+                      Selecciona una carta para verla
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
