@@ -1,11 +1,12 @@
-# Auth Transparency
+# AI Cover Letter Generator
 
-It's an educational web app that shows in real time what personal data any app receives when you log in using an external provider (Google, GitHub, or Discord). After you authenticate, the dashboard breaks down each field received from the OAuth token—name, email, avatar, unique ID, and more—explaining in plain language what a company can do with that information and how sensitive each piece of data is.
+It's a web app that generates personalized cover letters in seconds. Users paste a job posting and their professional profile, choose the tone (formal, creative, or concise), and the AI generates a tailored letter in real time. It includes a history of generated letters and preloaded examples to get you started quickly.
+Stack: Next.js 14 · TypeScript · Tailwind CSS · Groq API (llama-3.1-8b-instant)
 
 ## Technology Stack
 
-- Next.js 15 (App Router) — main framework with server and client components
+- Next.js 14 (App Router) — main framework with server and client components
 - TypeScript — static typing throughout the application
 - Tailwind CSS — utility styles
-- Auth.js v5 (NextAuth) — session management and OAuth flow with Google, GitHub, and Discord
+- Groq API (llama-3.1-8b-instant)
 - Vercel — deployment and hosting with automatic CI/CD from GitHub
